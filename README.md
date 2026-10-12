@@ -2,6 +2,10 @@
 
 A local web controller for an electric brewing kettle, running on a **classic ESP32 DevKit / WROOM-32**. The dashboard is embedded in firmware: no cloud account, external web server, CDN, or filesystem upload is needed.
 
+![WebBrew dashboard mockup showing kettle settings, live temperature, brew stages and manual controls](docs/images/dashboard-mockup.png)
+
+*Original interface concept mockup; displayed readings are illustrative. The implemented dashboard also includes selectable SSR polarity.*
+
 ## Features
 
 - Responsive dashboard with kettle settings on the left, live temperature graph, heater output, and remaining-time estimates.
