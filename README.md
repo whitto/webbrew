@@ -4,6 +4,10 @@ A local web controller for an electric brewing kettle, running on a **classic ES
 
 **v0.3 adds an Arduino IDE sous-vide version.** Open [`arduino/SousVide/SousVide.ino`](arduino/SousVide/SousVide.ino) and follow the [sous-vide guide](docs/SOUSVIDE.md) for bath controls, long cooking times and food-added timer confirmation.
 
+![SousVide dashboard mockup showing water bath settings, live temperature, cooking schedule and manual controls](docs/images/sousvide-dashboard.png)
+
+*Sous-vide interface preview from the browser simulation; displayed readings are illustrative.*
+
 For brewing in Arduino IDE, open [`arduino/WebBrew/WebBrew.ino`](arduino/WebBrew/WebBrew.ino) and follow the [Arduino setup guide](arduino/README.md). Both sketches use ESP32 core **2.0.17** and the listed libraries and include their complete web dashboard. The original PlatformIO project remains available.
 
 ![WebBrew dashboard mockup showing kettle settings, live temperature, brew stages and manual controls](docs/images/dashboard-mockup.png)
