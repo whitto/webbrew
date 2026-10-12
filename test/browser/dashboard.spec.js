@@ -1,0 +1,71 @@
+const { test, expect } = require('@playwright/test');
+test.beforeEach(async ({ page }) => {
+  await page.goto('/?demo=1');
+  await expect(page.locator('#connection')).toHaveText('● Interface simulation');
+});
+test('start, manual power, pause, resume, automatic and stop', async ({ page }) => {
+  await page.locator('#start').click();
+  await expect(page.locator('#modeBadge')).toContainText('AUTOMATIC');
+  await expect(page.locator('#ssrPin')).toBeDisabled();
+  await page.locator('#manualMode').click();
+  await expect(page.locator('#modeBadge')).toContainText('MANUAL');
+  await page.locator('#manualPower').fill('43');
+  await page.locator('#manualPower').dispatchEvent('change');
+  await expect(page.locator('#output')).toHaveText('43%', {timeout:5000});
+  await page.locator('#pause').click();
+  await expect(page.locator('#output')).toHaveText('0%');
+  await expect(page.locator('#manualPower')).toBeDisabled();
+  await page.locator('#pause').click();
+  await page.locator('#autoMode').click();
+  await expect(page.locator('#modeBadge')).toContainText('AUTOMATIC');
+  await page.locator('#stop').click();
+  await expect(page.locator('#modeBadge')).toContainText('IDLE');
+  await expect(page.locator('#output')).toHaveText('0%');
+});
+test('polarity, unit conversion and config persistence', async ({ page }) => {
+  await page.locator('#activeHigh').selectOption('false');
+  await page.locator('#unit').selectOption('F');
+  await expect(page.locator('#boilC')).toHaveValue('212.0');
+  await expect(page.locator('input[aria-label="Stage 1 target"]')).toHaveValue('172.4');
+  await expect(page.locator('#start')).toBeDisabled();
+  await page.locator('#saveConfig').click();
+  await expect(page.locator('#safety')).toContainText('active low / pull-up');
+  await expect(page.locator('#start')).toBeEnabled();
+  await page.locator('#unit').selectOption('C');
+  await expect(page.locator('#boilC')).toHaveValue('100.0');
+});
+test('stage edits, estimates and profiles', async ({ page }) => {
+  await page.locator('#volumeL').fill('30');
+  await page.locator('#volumeL').dispatchEvent('change');
+  await page.locator('#addStage').click();
+  await expect(page.locator('#stages tr')).toHaveCount(3);
+  await page.locator('input[aria-label="Stage 3 name"]').fill('Second hold');
+  await expect(page.locator('#totalEstimate')).toContainText('Estimated full schedule');
+  await page.locator('[data-page="profiles"]').click();
+  await page.locator('#profileName').fill('Test brew');
+  await page.locator('#saveProfile').click();
+  await page.locator('#loadProfile').click();
+  await page.locator('[data-page="dashboard"]').click();
+  await expect(page.locator('#volumeL')).toHaveValue('30');
+  await expect(page.locator('#stages tr')).toHaveCount(3);
+  await page.locator('#saveConfig').click();
+  await expect(page.locator('#start')).toBeEnabled();
+});
+test('invalid cutoff is rejected without applying changes', async ({ page }) => {
+  await page.locator('[data-page="settings"]').click();
+  await page.locator('#maxC').fill('99');
+  await page.locator('#maxC').dispatchEvent('change');
+  await page.locator('#saveConfig').click();
+  await expect(page.locator('#toast')).toContainText('Cutoff must be');
+  await expect(page.locator('#start')).toBeDisabled();
+});
+test('mobile layout and no browser errors', async ({ page }) => {
+  const errors=[];page.on('pageerror', e=>errors.push(e.message));
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.locator('#start')).toBeVisible();
+  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
+  expect(overflow).toBe(false);
+  await page.locator('#start').click();
+  await page.locator('#stop').click();
+  expect(errors).toEqual([]);
+});

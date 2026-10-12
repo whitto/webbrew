@@ -1,0 +1,14 @@
+{
+  "name": "webbrew",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ESP32 kettle controller UI validation tools",
+  "scripts": {
+    "test": "playwright test",
+    "test:native": "bash scripts/test_native.sh",
+    "demo": "python3 scripts/demo_server.py"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}
