@@ -2,6 +2,8 @@
 
 A local web controller for an electric brewing kettle, running on a **classic ESP32 DevKit / WROOM-32**. The dashboard is embedded in firmware: no cloud account, external web server, CDN, or filesystem upload is needed.
 
+**v0.2 supports Arduino IDE and PlatformIO.** For Arduino IDE, open [`arduino/WebBrew/WebBrew.ino`](arduino/WebBrew/WebBrew.ino) and follow the [Arduino setup guide](arduino/README.md). Install ESP32 core **2.0.17** and the listed libraries; the complete sketch and web dashboard are included.
+
 ![WebBrew dashboard mockup showing kettle settings, live temperature, brew stages and manual controls](docs/images/dashboard-mockup.png)
 
 *Original interface concept mockup; displayed readings are illustrative. The implemented dashboard also includes selectable SSR polarity.*
@@ -37,6 +39,8 @@ Use an appropriately rated, isolated **zero-cross AC SSR** and heatsink. Verify 
 **Commission with the heating supply disconnected, then supervise water-only runs.** Firmware checks cannot establish that water is present, detect every dry-fire condition, or disconnect a failed-short SSR. Fit independent thermal/dry-fire protection, a physical power isolator, and appropriate electrical protection. Mains wiring requires a qualified person. Automatic sequencing is implemented; unattended operation is not validated by the software tests.
 
 ## Build and flash
+
+For **Arduino IDE 2.x**, use the [Arduino setup guide](arduino/README.md). The commands below are for **PlatformIO**.
 
 Install [PlatformIO](https://platformio.org/install) (Core 6.1.18 is used in CI), then:
 
@@ -99,4 +103,9 @@ Host tests exercise sensor faults, cutoffs, timeouts, stage transitions, manual/
 - `scripts/embed_web.py`: embeds the dashboard in flash during a PlatformIO build.
 - `test/`: native controller and browser tests.
 - `docs/`: hardware commissioning and API reference.
+- `arduino/WebBrew/`: complete Arduino IDE sketch, generated from the same sources.
+
+## v0.2
+
+Adds a self-contained Arduino IDE sketch, a pinned board/library setup guide, and Arduino CLI build checks. Existing GPIO defaults, active-high/low SSR selection, internal bias, stages and dashboard behaviour are shared with the PlatformIO version.
 

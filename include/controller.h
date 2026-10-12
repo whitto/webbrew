@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace brew {
@@ -14,6 +15,9 @@ struct Stage {
   unsigned holdSeconds = 600;
   bool boil = false;
   double boilPower = 70;
+  Stage() = default;
+  Stage(std::string label, double target, unsigned hold, bool boiling, double power)
+    : name(std::move(label)), targetC(target), holdSeconds(hold), boil(boiling), boilPower(power) {}
 };
 struct Config {
   double volumeL = 25, powerW = 3000, boilC = 100, maxC = 105;
