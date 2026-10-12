@@ -1,6 +1,8 @@
-# WebBrew v0.2 for Arduino IDE
+# WebBrew and SousVide v0.3 for Arduino IDE
 
 This folder contains a complete Arduino IDE version of WebBrew. The firmware and dashboard are the same as the PlatformIO project. **No PlatformIO, Python, Node.js, filesystem upload or code-generation step is needed to use this committed sketch.**
+
+For sous-vide cooking, open **SousVide/SousVide.ino** instead and follow the [SousVide guide](../docs/SOUSVIDE.md). It uses the same board and libraries below, but has a dedicated cooking interface and separate saved settings. The following brewing instructions apply to **WebBrew/WebBrew.ino**.
 
 ## Arduino IDE setup
 
@@ -38,6 +40,7 @@ arduino-cli core update-index --additional-urls https://espressif.github.io/ardu
 arduino-cli core install esp32:esp32@2.0.17 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
 arduino-cli lib install "OneWire@2.3.8" "DallasTemperature@3.11.0" "ArduinoJson@7.2.1"
 arduino-cli compile --fqbn esp32:esp32:esp32 arduino/WebBrew
+arduino-cli compile --fqbn esp32:esp32:esp32 arduino/SousVide
 ```
 
 Run these from the repository root. Upload with `arduino-cli upload --fqbn esp32:esp32:esp32 --port YOUR_USB_PORT arduino/WebBrew` after isolating heating power.
@@ -51,4 +54,4 @@ python3 scripts/export_arduino.py
 python3 scripts/export_arduino.py --check
 ```
 
-CI checks that the sketch stays in sync and compiles it using the pinned ESP32 core and library versions. End users opening the committed sketch do not need to run the exporter.
+CI checks that both Arduino sketches stay in sync and compiles them using the pinned ESP32 core and library versions. End users opening the committed sketches do not need to run the exporter. The SousVide exporter selects its bath defaults; both versions share the controller, GPIO protection, and dashboard source.

@@ -2,7 +2,9 @@
 
 A local web controller for an electric brewing kettle, running on a **classic ESP32 DevKit / WROOM-32**. The dashboard is embedded in firmware: no cloud account, external web server, CDN, or filesystem upload is needed.
 
-**v0.2 supports Arduino IDE and PlatformIO.** For Arduino IDE, open [`arduino/WebBrew/WebBrew.ino`](arduino/WebBrew/WebBrew.ino) and follow the [Arduino setup guide](arduino/README.md). Install ESP32 core **2.0.17** and the listed libraries; the complete sketch and web dashboard are included.
+**v0.3 adds an Arduino IDE sous-vide version.** Open [`arduino/SousVide/SousVide.ino`](arduino/SousVide/SousVide.ino) and follow the [sous-vide guide](docs/SOUSVIDE.md) for bath controls, long cooking times and food-added timer confirmation.
+
+For brewing in Arduino IDE, open [`arduino/WebBrew/WebBrew.ino`](arduino/WebBrew/WebBrew.ino) and follow the [Arduino setup guide](arduino/README.md). Both sketches use ESP32 core **2.0.17** and the listed libraries and include their complete web dashboard. The original PlatformIO project remains available.
 
 ![WebBrew dashboard mockup showing kettle settings, live temperature, brew stages and manual controls](docs/images/dashboard-mockup.png)
 
@@ -104,6 +106,11 @@ Host tests exercise sensor faults, cutoffs, timeouts, stage transitions, manual/
 - `test/`: native controller and browser tests.
 - `docs/`: hardware commissioning and API reference.
 - `arduino/WebBrew/`: complete Arduino IDE sketch, generated from the same sources.
+- `arduino/SousVide/`: standalone Arduino IDE water-bath controller; see [SousVide](docs/SOUSVIDE.md).
+
+## v0.3
+
+Adds a dedicated SousVide Arduino sketch with its own settings, 40–90 °C targets, up to 48-hour holds, explicit food-added timer confirmation and a two-sided ±0.3 °C bath timing band. The cooking interface hides boil controls and includes editable bath templates. GPIO defaults and selectable SSR polarity are retained.
 
 ## v0.2
 

@@ -11,6 +11,8 @@ All endpoints require HTTP Basic authentication: username `brew`, device-generat
 | `/api/network` | POST | Save local Wi-Fi SSID/password; only while stopped and fault-free |
 | `/api/password` | POST | Change dashboard password; only while stopped and fault-free |
 
+The separate [SousVide Arduino version](SOUSVIDE.md) uses the same endpoints. Its configuration requires `sousVide: true`, and status includes `foodAdded`. Brewing configurations from v0.2 without a `sousVide` field remain supported as brewing mode. The sous-vide timer requires `{"action":"foodAdded"}` after the measured bath reaches the target band; cooking controls and ranges are described in the sous-vide guide.
+
 Config payload example (the complete object is required):
 
 ```json

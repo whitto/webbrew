@@ -24,8 +24,16 @@ struct Config {
   unsigned maxRunSeconds = 4 * 3600;
   int ssrPin = 25, probePin = 4;
   bool activeHigh = true, fahrenheit = false, learning = true;
+  bool sousVide = false;
   std::vector<Stage> stages = {{"Warm-up & hold", 78, 600, false, 70}, {"Boil", 100, 3600, true, 70}};
 };
+inline Config sousVideDefaults() {
+  Config c;
+  c.sousVide = true; c.volumeL = 10; c.powerW = 1000; c.maxC = 95;
+  c.maxRunSeconds = 48 * 3600;
+  c.stages = {{"Cook & hold", 60, 2 * 3600, false, 0}};
+  return c;
+}
 inline bool safeOutputPin(int pin) {
   const int pins[] = {18,19,21,22,23,25,26,27,32,33};
   for (int p : pins) if (p == pin) return true;
@@ -35,19 +43,28 @@ inline std::string validate(const Config& c) {
   if (!std::isfinite(c.volumeL) || c.volumeL < 1 || c.volumeL > 200) return "Volume must be 1–200 L";
   if (!std::isfinite(c.powerW) || c.powerW < 100 || c.powerW > 12000) return "Element power must be 100–12000 W";
   if (!std::isfinite(c.boilC) || c.boilC < 85 || c.boilC > 102) return "Boil point must be 85–102 °C";
-  if (!std::isfinite(c.maxC) || c.maxC < c.boilC + 2 || c.maxC > 110) return "Temperature cutoff must be at least 2 °C above boil point, at most 110 °C";
-  if (c.maxRunSeconds < 60 || c.maxRunSeconds > 12 * 3600) return "Session limit must be 1–720 min";
+  if (!std::isfinite(c.maxC) || (c.sousVide ? c.maxC < 42 || c.maxC > 95 : c.maxC < c.boilC + 2 || c.maxC > 110))
+    return c.sousVide ? "Sous-vide cutoff must be 42–95 °C" : "Temperature cutoff must be at least 2 °C above boil point, at most 110 °C";
+  if (c.maxRunSeconds < 60 || c.maxRunSeconds > (c.sousVide ? 72 : 12) * 3600u)
+    return c.sousVide ? "Session limit must be 1–4320 min" : "Session limit must be 1–720 min";
   if (!safeOutputPin(c.ssrPin) || !(safeOutputPin(c.probePin) || c.probePin == 4) || c.ssrPin == c.probePin)
     return "Choose distinct supported SSR and probe GPIOs";
   if (c.stages.empty() || c.stages.size() > 8) return "Use 1–8 stages";
   uint64_t total = 0;
   for (const auto& s : c.stages) {
     if (s.name.empty() || s.name.size() > 48) return "Stage names must be 1–48 characters";
-    if (!std::isfinite(s.targetC) || s.targetC < 20 || s.targetC > c.boilC) return "Stage targets must be 20 °C through the boil point";
-    if (s.boil && std::abs(s.targetC - c.boilC) > 0.01) return "Boil stage target must equal the configured boil point";
-    if (!s.boil && s.targetC > c.boilC - 2) return "Hold stages must be at least 2 °C below boiling";
+    if (c.sousVide) {
+      if (s.boil) return "Boil stages are disabled in sous-vide mode";
+      if (!std::isfinite(s.targetC) || s.targetC < 40 || s.targetC > 90) return "Sous-vide targets must be 40–90 °C";
+      if (c.maxC < s.targetC + 2) return "Cutoff must be at least 2 °C above every sous-vide target";
+    } else {
+      if (!std::isfinite(s.targetC) || s.targetC < 20 || s.targetC > c.boilC) return "Stage targets must be 20 °C through the boil point";
+      if (s.boil && std::abs(s.targetC - c.boilC) > 0.01) return "Boil stage target must equal the configured boil point";
+      if (!s.boil && s.targetC > c.boilC - 2) return "Hold stages must be at least 2 °C below boiling";
+    }
     if (!std::isfinite(s.boilPower) || s.boilPower < 0 || s.boilPower > 100) return "Boil power must be 0–100%";
-    if (s.holdSeconds > 6 * 3600) return "Stage hold must be at most 360 min";
+    if (s.holdSeconds > (c.sousVide ? 48 : 6) * 3600u)
+      return c.sousVide ? "Cook hold must be at most 2880 min" : "Stage hold must be at most 360 min";
     total += s.holdSeconds;
   }
   if (total >= c.maxRunSeconds) return "Session limit must exceed total hold time (allow time for heating)";
@@ -64,6 +81,7 @@ class Controller {
   Config config;
   State state = State::Idle;
   bool manual = false, reached = false, sensorOK = false;
+  bool foodAdded = false;
   double temperature = 0, output = 0, manualPower = 0;
   double kp = 12, ki = 0.05, kd = 30, efficiency = 0.8;
   double holdElapsed = 0, runElapsed = 0;
@@ -84,24 +102,32 @@ class Controller {
   bool start(uint32_t now) {
     if (state == State::Fault || active() || !validate(config).empty() || !sensorFresh(now) || temperature >= config.maxC) return false;
     state = State::Running; manual = false; reached = false; fault.clear(); stageIndex = 0;
+    foodAdded = false;
     holdElapsed = runElapsed = output = manualPower = integral_ = 0;
     learnedSamples = 0; lastTick_ = now; lastTemp_ = temperature;
     tuneFromModel();
     learningSeconds_ = learningEnergy_ = 0; learningStart_ = temperature;
     return true;
   }
-  void stop() { state = State::Idle; output = manualPower = 0; manual = false; reached = false; integral_ = 0; }
+  void stop() { state = State::Idle; output = manualPower = 0; manual = false; reached = false; foodAdded = false; integral_ = 0; }
+  bool confirmFood(uint32_t now) {
+    if (!config.sousVide || state != State::Running || manual || foodAdded || !reached ||
+        !sensorFresh(now) || std::abs(temperature-target()) > 0.3) return false;
+    foodAdded = true; return true;
+  }
   bool resetFault(uint32_t now) {
     if (state != State::Fault || !sensorFresh(now) || temperature >= config.maxC - 2) return false;
     fault.clear(); stop(); return true;
   }
   bool pause() {
     if (state != State::Running) return false;
-    state = State::Paused; output = 0; return true;
+    state = State::Paused; output = 0;
+    learningSeconds_ = learningEnergy_ = 0; learningStart_ = temperature; return true;
   }
   bool resume(uint32_t now) {
     if (state != State::Paused || !sensorFresh(now)) return false;
-    state = State::Running; integral_ = 0; lastTemp_ = temperature; return true;
+    state = State::Running; integral_ = 0; lastTemp_ = temperature;
+    learningSeconds_ = learningEnergy_ = 0; learningStart_ = temperature; return true;
   }
   bool setManual(bool enabled, double power) {
     if (!active() || !std::isfinite(power) || power < 0 || power > 100) return false;
@@ -137,10 +163,12 @@ class Controller {
     if (state == State::Paused) { output = 0; lastTemp_ = temperature; return; }
     if (manual) { output = manualPower; lastTemp_ = temperature; return; }
     auto& s = config.stages[stageIndex];
-    if (temperature >= s.targetC - (s.boil ? 0.5 : 0.3)) reached = true;
-    // Accumulate hold only while actually within the target band.
-    if (reached && temperature >= s.targetC - 1.0) holdElapsed += dt;
-    if (reached && holdElapsed >= s.holdSeconds) {
+    bool inBand = config.sousVide ? std::abs(temperature-s.targetC) <= 0.3 : temperature >= s.targetC-1.0;
+    if (config.sousVide ? inBand : temperature >= s.targetC - (s.boil ? 0.5 : 0.3)) reached = true;
+    // Sous-vide needs an explicit food-added confirmation and a two-sided bath band.
+    bool canTime = reached && (!config.sousVide || foodAdded);
+    if (canTime && inBand) holdElapsed += dt;
+    if (canTime && holdElapsed >= s.holdSeconds) {
       ++stageIndex; holdElapsed = 0; reached = false; integral_ = 0;
       learningSeconds_ = learningEnergy_ = 0; learningStart_ = temperature;
       if (stageIndex >= config.stages.size()) { state = State::Complete; output = 0; --stageIndex; return; }

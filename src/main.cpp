@@ -53,6 +53,7 @@ void configureProbe() {
   probe->requestTemperatures(); requestAt = millis();
 }
 void configToJson(JsonObject obj, const brew::Config& c) {
+  obj["sousVide"] = c.sousVide;
   obj["volumeL"] = c.volumeL; obj["powerW"] = c.powerW;
   obj["boilC"] = c.boilC; obj["maxC"] = c.maxC;
   obj["maxRunSeconds"] = c.maxRunSeconds;
@@ -66,6 +67,11 @@ void configToJson(JsonObject obj, const brew::Config& c) {
   }
 }
 bool readConfig(JsonVariantConst o, brew::Config& c) {
+  if (!o["sousVide"].isNull() && !o["sousVide"].is<bool>()) return false;
+  c.sousVide = o["sousVide"] | false; // v0.2 brew settings have no mode field.
+#ifdef WEBBREW_SOUSVIDE
+  if (!c.sousVide) return false;
+#endif
   if (!o.is<JsonObjectConst>() || !o["volumeL"].is<double>() || !o["powerW"].is<double>() ||
       !o["boilC"].is<double>() || !o["maxC"].is<double>() || !o["maxRunSeconds"].is<unsigned>() ||
       !o["ssrPin"].is<int>() || !o["probePin"].is<int>() || !o["activeHigh"].is<bool>() ||
@@ -110,6 +116,7 @@ void status() {
   d["targetC"] = controller.target(); d["output"] = controller.output;
   d["manualPower"] = controller.manualPower; d["stageIndex"] = controller.stageIndex;
   d["reached"] = controller.reached; d["holdElapsed"] = controller.holdElapsed;
+  d["foodAdded"] = controller.foodAdded;
   d["runElapsed"] = controller.runElapsed; d["remainingSeconds"] = controller.remainingSeconds();
   d["fault"] = controller.fault; d["kp"] = controller.kp; d["ki"] = controller.ki; d["kd"] = controller.kd;
   d["efficiency"] = controller.efficiency; d["learnedSamples"] = controller.learnedSamples;
@@ -150,6 +157,7 @@ void command() {
   } else if (action == "pause") { ok = controller.pause(); off(); }
   else if (action == "resume") ok = controller.resume(millis());
   else if (action == "reset") ok = controller.resetFault(millis());
+  else if (action == "foodAdded") ok = controller.confirmFood(millis());
   else if (action == "mode" && d["manual"].is<bool>() && d["power"].is<double>()) {
     ok = controller.setManual(d["manual"], d["power"]); off(); windowAt = millis();
   }
@@ -180,7 +188,12 @@ void changePassword() {
 }
 void setup() {
   Serial.begin(115200);
+#ifdef WEBBREW_SOUSVIDE
+  controller.config = brew::sousVideDefaults();
+  prefs.begin("sousvide", false);
+#else
   prefs.begin("webbrew", false);
+#endif
   String saved = prefs.getString("config", "");
   bool invalidStored = false;
   if (saved.length()) {
@@ -197,11 +210,11 @@ void setup() {
   wifiSsid = prefs.getString("ssid", ""); wifiPassword = prefs.getString("wifiPass", "");
   uint64_t mac = ESP.getEfuseMac();
   char suffix[5]; snprintf(suffix, sizeof(suffix), "%04X", (unsigned)(mac & 0xFFFF));
-  apName = String("WebBrew-") + suffix;
+  apName = String(controller.config.sousVide ? "SousVide-" : "WebBrew-") + suffix;
   WiFi.mode(WIFI_AP_STA); WiFi.setAutoReconnect(true);
   WiFi.softAP(apName.c_str(), password.c_str());
   if (wifiSsid.length()) WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
-  Serial.printf("\nWebBrew setup: %s\nWi-Fi / dashboard password: %s\nDashboard user: brew\nAddress: http://192.168.4.1\n", apName.c_str(), password.c_str());
+  Serial.printf("\n%s setup: %s\nWi-Fi / dashboard password: %s\nDashboard user: brew\nAddress: http://192.168.4.1\n", controller.config.sousVide ? "SousVide" : "WebBrew", apName.c_str(), password.c_str());
   configureProbe();
   const char* headers[] = {"X-WebBrew-Token"}; server.collectHeaders(headers, 1);
   server.on("/", HTTP_GET, []() {

@@ -120,6 +120,74 @@ int main() {
       }
       CHECK(c.state==State::Complete); CHECK(c.output==0); CHECK(peak<=100);
     });
+    test("sous-vide defaults and mode-specific limits", [] {
+      Config c=sousVideDefaults(); CHECK(c.sousVide); CHECK(validate(c).empty());
+      c.stages[0].boil=true; CHECK(!validate(c).empty());
+      c=sousVideDefaults(); c.stages[0].targetC=91; CHECK(!validate(c).empty());
+      c=sousVideDefaults(); c.maxC=61; CHECK(!validate(c).empty());
+      c=sousVideDefaults(); c.maxC=96; CHECK(!validate(c).empty());
+      c=sousVideDefaults(); c.stages[0].holdSeconds=48*3600; c.maxRunSeconds=72*3600; CHECK(validate(c).empty());
+      c.stages[0].holdSeconds++; CHECK(!validate(c).empty());
+    });
+    test("sous-vide preheat waits for explicit food confirmation", [] {
+      Controller c; c.config=sousVideDefaults(); ready(c);
+      CHECK(!c.confirmFood(0)); tick(c,1,60); CHECK(c.reached); CHECK(c.holdElapsed==0);
+      tick(c,2,60); CHECK(c.holdElapsed==0); CHECK(c.confirmFood(2000));
+      CHECK(!c.confirmFood(2000)); tick(c,3,60); CHECK(c.holdElapsed==1);
+    });
+    test("sous-vide confirmation rejects hot, manual and paused bath", [] {
+      Controller c; c.config=sousVideDefaults(); ready(c);
+      tick(c,1,60); tick(c,2,61); CHECK(!c.confirmFood(2000));
+      tick(c,3,60); CHECK(c.setManual(true,10)); CHECK(!c.confirmFood(3000));
+      CHECK(c.setManual(false,0)); CHECK(c.pause()); CHECK(!c.confirmFood(3000));
+      CHECK(c.resume(3000)); CHECK(c.confirmFood(3000));
+    });
+    test("sous-vide timer excludes temperatures above and below band", [] {
+      Controller c; c.config=sousVideDefaults(); ready(c); tick(c,1,60); CHECK(c.confirmFood(1000));
+      tick(c,2,60.2); CHECK(c.holdElapsed==1);
+      tick(c,3,60.4); CHECK(c.holdElapsed==1);
+      tick(c,4,59.6); CHECK(c.holdElapsed==1);
+      tick(c,5,59.8); CHECK(c.holdElapsed==2);
+      CHECK(c.setManual(true,20)); tick(c,6,60); CHECK(c.holdElapsed==2);
+      CHECK(c.setManual(false,0)); CHECK(c.pause()); tick(c,7,60); CHECK(c.holdElapsed==2);
+      CHECK(c.resume(7000)); tick(c,8,60); CHECK(c.holdElapsed==3);
+    });
+    test("sous-vide staged cook finishes with heater off", [] {
+      Controller c; c.config=sousVideDefaults(); c.config.stages={{"First",60,2,false,0},{"Second",65,1,false,0}};
+      ready(c); tick(c,1,60); CHECK(c.confirmFood(1000)); tick(c,2,60); tick(c,3,60);
+      CHECK(c.stageIndex==1); CHECK(c.foodAdded); CHECK(c.output==0);
+      tick(c,4,65); CHECK(c.state==State::Complete); CHECK(c.output==0);
+    });
+    test("sous-vide safety cutoff overrides manual and waiting timer", [] {
+      Controller c; c.config=sousVideDefaults(); ready(c); tick(c,1,60); CHECK(c.holdElapsed==0);
+      CHECK(c.setManual(true,100)); tick(c,2,95); CHECK(c.state==State::Fault); CHECK(c.output==0);
+      CHECK(!c.confirmFood(2000));
+    });
+    test("sous-vide long cook remains active beyond brewing time limit", [] {
+      Controller c; c.config=sousVideDefaults(); c.config.stages[0].holdSeconds=24*3600;
+      ready(c); tick(c,1,60); CHECK(c.confirmFood(1000));
+      for (unsigned i=2;i<=13*3600;i++) tick(c,i,60);
+      CHECK(c.state==State::Running); CHECK(c.holdElapsed==13*3600-1);
+    });
+    test("sous-vide restart requires fresh food confirmation", [] {
+      Controller c; c.config=sousVideDefaults(); ready(c); tick(c,1,60); CHECK(c.confirmFood(1000));
+      c.stop(); CHECK(!c.foodAdded); CHECK(c.start(1000)); tick(c,2,60); CHECK(c.holdElapsed==0);
+    });
+    test("simulated circulating bath recovers from food-loading dip", [] {
+      Controller c; c.config=sousVideDefaults(); c.config.stages[0].holdSeconds=120;
+      ready(c); double water=20; bool loaded=false, dipped=false, waited=false;
+      for(unsigned second=1; second<=12000&&c.state==State::Running; ++second) {
+        water += (1000*.8*c.output/100 - 2*(water-20))/(10*4186);
+        bool drop=loaded&&!dipped&&c.holdElapsed>=30;
+        double before=c.holdElapsed;
+        if(drop) { water-=3; dipped=true; }
+        tick(c,second,water);
+        if(drop) { CHECK(c.holdElapsed==before); waited=true; }
+        if(!loaded&&c.reached&&std::abs(water-60)<=.3) loaded=c.confirmFood(second*1000);
+      }
+      CHECK(loaded&&dipped&&waited); CHECK(c.learnedSamples>0);
+      CHECK(c.state==State::Complete); CHECK(c.output==0);
+    });
   } catch(const std::exception& e) { std::cerr<<"FAIL "<<e.what()<<'\n'; return EXIT_FAILURE; }
   std::cout<<passed<<" tests passed\n";
 }
